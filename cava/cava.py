@@ -12,12 +12,13 @@ from typing import List
 genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
 MAX_NEW_TOKENS = 128
-CHUNK_SIZE = 20000
+CHUNK_SIZE = 2000
 
 # LOCAL_MODEL_NAME = "Qwen/Qwen2.5-14B-Instruct"
-LOCAL_MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
+LOCAL_MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
 GEMINI_MODEL_NAME = "gemini-2.5-flash-lite"
 
+MODEL_LOGS = []
 
 # Disable grad for torch
 torch.set_grad_enabled(False)
@@ -101,6 +102,8 @@ def worker_node(state: CoAState):
         # prev = state["worker_outputs"][i-1].content
         prev = state["worker_outputs"][i-1]
     prompt = WORKER_PROMPT(i, state["query"], chunk, prev)
+    worker_msg = f"Worker {i} with Prompt: \n######{prompt}\n#######\n"
+    MODEL_LOGS.append(worker_msg)
     if state["verbose"]:
         print(f"Worker {i} with Prompt: \n######{prompt}\n#######\n")
         print("worker invoke")
@@ -111,6 +114,8 @@ def worker_node(state: CoAState):
     # Note new outut
     state["worker_outputs"].append(out)
     state["i"] += 1
+    worker_output = f"Worker {i} Outputs: \n{out}\n"
+    MODEL_LOGS.append(worker_output)
     if state["verbose"]:
         # print(f"Outputs: {out.content}\n------------------\n\n")
         print(f"Outputs: {out}\n------------------\n\n")
@@ -123,11 +128,15 @@ def manager_node(state:CoAState):
     # last_worker_output = state["worker_outputs"][-1].content
     last_worker_output = state["worker_outputs"][-1]
     prompt = MANAGER_PROMPT(state["query"], last_worker_output)
+    manager_prompt = f"Manager with Prompt: \n######{prompt}\n#######\n"
+    MODEL_LOGS.append(manager_prompt)
     if state["verbose"]:
         print(f"Manager with Prompt: \n######{prompt}\n#######\n")
     final_answer = manager.invoke(prompt)
     # store final summary as last output
     state["manager_output"] = final_answer
+    manager_output = f"Manager Final Output: \n#############\n{final_answer}"
+    MODEL_LOGS.append(manager_output)
     if state["verbose"]:
         # print(f"Manager Final Output: \n#############\n{final_answer.content}")
         print(f"Manager Final Output: \n#############\n{final_answer}")
@@ -192,6 +201,8 @@ def run_cove(query: str, chunk: str, baseline_summary: str, worker_idx: int, ver
     # 2. Plan verification questions
     plan_prompt = PLAN_VERIFICATIONS_PROMPT(query, chunk, baseline_summary)
 
+    cove_plan = f"[CoVe][Worker {worker_idx}] Plan prompt:\n{plan_prompt}\n"
+    MODEL_LOGS.append(cove_plan)
     if verbose:
         print(f"[CoVe][Worker {worker_idx}] Plan prompt:\n{plan_prompt}\n")
 
@@ -206,6 +217,8 @@ def run_cove(query: str, chunk: str, baseline_summary: str, worker_idx: int, ver
     ]
     questions = [q for q in questions if q]
 
+    cove_questions = f"[CoVe][Worker {worker_idx}] Verification Questions:\n{questions}\n"
+    MODEL_LOGS.append(cove_questions)
     if verbose:
         print(f"[CoVe][Worker {worker_idx}] Verification Questions:\n{questions}\n")
 
@@ -229,16 +242,25 @@ def run_cove(query: str, chunk: str, baseline_summary: str, worker_idx: int, ver
         questions_for_gen = questions
         answers_for_gen = parsed_answers
 
+    cove_ans = f"[CoVe][Worker {worker_idx}] Answers:\n{answers_for_gen}\n"
+    MODEL_LOGS.append(cove_ans)
     if verbose:
         print(f"[CoVe][Worker {worker_idx}] Answers:\n{answers_for_gen}\n")
 
     # 4. Generate final verified summary
     final_prompt = GEN_FINAL_RESPONSE_PROMPT(query, chunk, baseline_summary, questions_for_gen, answers_for_gen)
+
+    cove_final_prompt = f"[CoVe][Worker {worker_idx}] final_prompt: {final_prompt}\n"
+    MODEL_LOGS.append(cove_final_prompt)
+    
     if verbose:
         print(f"final_prompt: {final_prompt}")
+    
     final_resp = verifier.invoke(final_prompt)
     final_summary = str(getattr(final_resp, "content", final_resp)).strip() # [TODO] add in worker node? Depending on the LLM wrapper, llm.invoke() may return a plain string or a message object AIMessage(..., content="some text", ...)
 
+    cove_final = f"[CoVe][Worker {worker_idx}] Final verified summary:\n{final_summary}\n"
+    MODEL_LOGS.append(cove_final)
     if verbose:
         print(f"[CoVe][Worker {worker_idx}] Final verified summary:\n{final_summary}\n")
 
@@ -368,6 +390,8 @@ def run_cava(query, context, verbose=True, verification_mode="none", verificatio
         if verbose:
             print(f"Extractor -- Done")
 
+    final_ans = f"Query: {state['query']}\nFinal Answer: {final_ans}"
+    MODEL_LOGS.append(final_ans)
     if verbose:
         print(f"Query: {state['query']}\nFinal Answer: {final_ans}")
     return final_ans

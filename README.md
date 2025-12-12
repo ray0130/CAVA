@@ -71,6 +71,57 @@ It will save an output log to your specified path. You can also print the result
 
 ## Analysis
 
+`Analysis.ipynb` aggregates per-example JSONL logs from HotpotQA runs and produces:
+- Overall mean F1 and Exact Match (EM) per method
+- Subgroup breakdowns by question type (bridge/comparison) and level (easy/medium/hard)
+- Paired t-tests between methods
+- Plots used in the report/slides
+- Candidate examples for qualitative analysis (e.g., largest ΔF1 between two CoA and CAVA_every3)
+
+### Required Data 
+
+JSONL logs with (at minimum) fields like:
+- `id`
+    Unique identifier of the example from the HotpotQA dataset.
+- `idx`
+    Integer index of the example within the evaluated subset (for bookkeeping and reproducibility).
+- `type`
+    Question type: bridge or comparison
+- `level`
+    Difficulty level: easy, medium, or hard
+- `question`
+    The natural-language question given to the model.
+- `gold_answer`
+    Ground-truth answer from the HotpotQA dataset.
+- `prediction`
+    Final answer produced by the model.
+- `f1`
+    Token-level F1 score between the prediction and the gold answer, computed after standard normalization (lowercasing, punctuation removal, and article stripping).
+- `em`
+    Exact Match score (0 or 1), indicating whether the normalized prediction exactly matches the normalized gold answer.
+
+### Configure log paths
+
+You can provide one file or a list of files per method:
+
+```
+LOG_FILES = {
+  "CoA": [
+    "/log_dir/.../coa_easy.jsonl",
+    "/log_dir/.../coa_medium.jsonl",
+  ],
+  "CAVA_every3": "/log_dir/.../cava_every3.jsonl",
+  "full_context": "/log_dir/.../full_context.jsonl",
+  ...
+}
+```
+All files under the same method will be concatenated and deduplicated by (id, idx, method)
+
+### Analysis Results
+
+The notebook prints summary tables and shows plots.
+
+Use the “Qualitative / error analysis” section to export a shortlist of example IDs to re-run with traces.
 
 
 ## Demo

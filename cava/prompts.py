@@ -1,5 +1,5 @@
 # --- Prompts ------------------------------------------------------------------
-# For QA Tasks
+
 WORKER_PROMPT = lambda i, query, chunk, prev: f"""
 You are Worker {i} in a chain solving a long-context question answering task.
 
@@ -29,17 +29,6 @@ Previous worker summary:
 Now output the combined summary:
 """
 
-# WORKER_PROMPT = lambda i, query, chunk, prev: f"""
-# You are Worker {i} in a chain solving a long-context task.
-# ONLY use the provided chunk and previous message.
-# You need to read current source text and summary of previous source text (if any),
-# and generate a summary to include them both and that best helps answer the query.
-# Keep ≤ 300 tokens. If no new info, forward previous message unchanged.
-
-# Query: {query}
-# Current source text: CHUNK {i} (do NOT reference other chunks):\n{chunk}\n
-# Previous source text :\n{prev}
-# """
 
 MANAGER_PROMPT = lambda query, final_worker_json: f"""
 You are the Manager in a HotpotQA question answering system.
@@ -67,30 +56,6 @@ Query:
 Summary of evidence:
 {final_worker_json}
 """
-
-# MANAGER_PROMPT = lambda query, final_worker_json: f"""
-# You are the Manager. Read the summary and decide on the best possible answer.
-
-# Query:
-# {query}
-
-# Summary of evidence:
-# {final_worker_json}
-
-# First, reason briefly about the answer.
-# Then end with a line starting with: Final answer: <answer>
-
-# Make sure the final answer line contains the minimal answer span that should be evaluated.
-# """
-# lambda query, final_worker_json: f"""
-# You are the Manager. Synthesize the final answer.
-# Please keep the final answer as short as possible and do not respond with full sentences.
-# Just reply with the final answer.
-# The source is too long and has been summarized. You need to answer based on the summary.
-
-# Query: {query}
-# Final worker Summary: {final_worker_json}
-# """
 
 # ===== CoVe =====
 PLAN_VERIFICATIONS_PROMPT = lambda query, chunk, baseline_summary: f"""
@@ -184,24 +149,3 @@ Model's answer:
 
 Now output the answer string only:
 """
-# lambda query, manager_output: f"""
-# You are post-processing the output of a QA system on the HotpotQA dataset.
-# Your task: extract the **final answer string** that should be evaluated against the gold answer.
-# Constraints (very important):
-# - Return **only** the minimal answer span.
-# - Do **not** include explanations, reasoning, or extra words.
-# - Do **not** include phrases like "The answer is", "It is", etc.
-# - Do **not** add punctuation at the beginning or end unless it is part of the entity (e.g., "U.S.").
-# - Do **not** output multiple sentences.
-# - If the question is yes/no, answer with exactly **"yes"** or **"no"**.
-# - If the model’s answer is clearly wrong or missing, output **"no answer"**.
-
-# HotpotQA style:
-# - Answers are usually short spans: a name, location, date, number, or "yes"/"no".
-# - Avoid extra context, titles, or clauses.
-
-# Query: {query}
-# Model's answer: {manager_output}
-
-# Now output ONLY the final answer span that should be scored by HotpotQA:
-# """

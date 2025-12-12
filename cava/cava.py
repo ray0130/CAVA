@@ -11,30 +11,35 @@ from typing import List
 # One time config, you can also move this outside the function
 genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
+# Set constants
 MAX_NEW_TOKENS = 128
 CHUNK_SIZE = 2000
 
+# Set model name
 # LOCAL_MODEL_NAME = "Qwen/Qwen2.5-14B-Instruct"
 LOCAL_MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
 GEMINI_MODEL_NAME = "gemini-2.5-flash-lite"
 
+# Initialize logs
 MODEL_LOGS = []
 
 # Disable grad for torch
 torch.set_grad_enabled(False)
 
+# Function to create LLM
 def load_local_llm(model_id, max_new_tokens=MAX_NEW_TOKENS):
     tokenizer = AutoTokenizer.from_pretrained(model_id)
 
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         device_map="auto",
-        # torch_dtype=torch.float16,
         dtype=torch.float16,
     )
     model.eval()
     def _generate(prompt: str) -> str:
+        # Tokenize input
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        # Call model
         with torch.inference_mode():
             out = model.generate(
                 **inputs,
@@ -42,21 +47,15 @@ def load_local_llm(model_id, max_new_tokens=MAX_NEW_TOKENS):
                 do_sample=False,
                 use_cache=True,
             )
-        # slice off prompt tokens
+        # Remove input prompt from final output
         gen_ids = out[0, inputs["input_ids"].shape[1]:]
         text = tokenizer.decode(gen_ids, skip_special_tokens=True)
         return text.strip()
-
+    # Return class so we can call llm.invoke()
     return RunnableLambda(lambda x: _generate(x))
 
-def load_google_llm(
-    model_name: str,
-    max_new_tokens: int = 256,   # or MAX_NEW_TOKENS if you have it defined
-):
-    """
-    Wrap a Google AI Studio model (Gemini) as a LangChain Runnable that you can call with .invoke(prompt).
-    """
-
+# Use Gemini, we use the same runnable to make it able to call llm.invoke()
+def load_google_llm(model_name: str, max_new_tokens: int = 256):
     model = genai.GenerativeModel(model_name)
 
     def _generate(prompt: str) -> str:
@@ -91,24 +90,29 @@ manager = llm_strong
 verifier = llm_strong
 extractor = llm_strong
 
+# CoA Worker Node
 def worker_node(state: CoAState):
+    # Get current state and chunk
     i = state["i"]
     chunk = state["chunks"][i]
+    # Get previous summary, if any
     if i == 0:
         prev = "No Previous summaries"
     else:
-        # Get previous worker's output
-        # print(state["worker_outputs"][i-1])
-        # prev = state["worker_outputs"][i-1].content
         prev = state["worker_outputs"][i-1]
+    
+    # Create prompt and log
     prompt = WORKER_PROMPT(i, state["query"], chunk, prev)
     worker_msg = f"Worker {i} with Prompt: \n######{prompt}\n#######\n"
     MODEL_LOGS.append(worker_msg)
     if state["verbose"]:
         print(f"Worker {i} with Prompt: \n######{prompt}\n#######\n")
         print("worker invoke")
+    
+    # Call worker LLM
     out = worker.invoke(prompt)
 
+    # Store output and log
     if state["verbose"]:
         print("worker invoke -- done")
     # Note new outut
@@ -117,7 +121,6 @@ def worker_node(state: CoAState):
     worker_output = f"Worker {i} Outputs: \n{out}\n"
     MODEL_LOGS.append(worker_output)
     if state["verbose"]:
-        # print(f"Outputs: {out.content}\n------------------\n\n")
         print(f"Outputs: {out}\n------------------\n\n")
 
     return state
@@ -125,7 +128,6 @@ def worker_node(state: CoAState):
 def manager_node(state:CoAState):
     if state["verbose"]:
         state["worker_outputs"][-1]
-    # last_worker_output = state["worker_outputs"][-1].content
     last_worker_output = state["worker_outputs"][-1]
     prompt = MANAGER_PROMPT(state["query"], last_worker_output)
     manager_prompt = f"Manager with Prompt: \n######{prompt}\n#######\n"
@@ -138,7 +140,6 @@ def manager_node(state:CoAState):
     manager_output = f"Manager Final Output: \n#############\n{final_answer}"
     MODEL_LOGS.append(manager_output)
     if state["verbose"]:
-        # print(f"Manager Final Output: \n#############\n{final_answer.content}")
         print(f"Manager Final Output: \n#############\n{final_answer}")
 
     return state
@@ -324,11 +325,10 @@ def maybe_run_verification(state: CoAState) -> CoAState:
 
 def run_cava(query, context, verbose=True, verification_mode="none", verification_k=1, store_verification_traces=True, postprocess=True): # chunk_size
     # Split context
-    # chunks = split_text(context, chunk_size=chunk_size)
     chunks = splitter.split_text(context)
     if verbose:
         print("Text Chunks: ",chunks)
-    # assert 1==2
+        
     # Initialize initial CoAState
     init_state = {
         "query": query,
@@ -379,16 +379,6 @@ def run_cava(query, context, verbose=True, verification_mode="none", verificatio
         final_ans = final_ans.lower().split("Final answer: ".lower())[-1]
     if verbose:
         print(f"Manager producing output -- Done")
-
-    # Post processing
-    if postprocess and False:
-        if verbose:
-            print(f"Extractor")
-        prompt = EXTRACT_ANSWER_PROMPT(query, state["manager_output"])
-        resp = extractor.invoke(prompt)
-        final_ans = str(getattr(resp, "content", resp)).strip()
-        if verbose:
-            print(f"Extractor -- Done")
 
     final_ans = f"Query: {state['query']}\nFinal Answer: {final_ans}"
     MODEL_LOGS.append(final_ans)

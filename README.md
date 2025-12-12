@@ -27,6 +27,8 @@ Text splitter chunk size is specified in `CHUNK_SIZE`
 
 ### Experiments
 
+#### Verification settings
+
 To run CAVA with verification on every worker, please set `VERIFICATION_MODE="every"`.
 
 To run CAVA with verification on every K worker, please set `VERIFICATION_MODE="every_k"` and set `VERIFICATION_K = K`, where K is how many workers in between each verification step.
@@ -42,6 +44,23 @@ To run Full Context Baseline, please make the following changes
 # Uncomment line below
 final_ans = raw_model(question, merged_context)
 ```
+
+### Dataset loading
+
+We provide two dataset loaders depending on the experimental setting:
+
+Random subset from validation split
+
+```
+data = load_hotpotqa(split="validation", max_samples=NUM_SAMPLES_TO_LOAD)
+```
+
+Balanced subset by difficulty level
+
+```
+data = load_hotpotqa_balanced(split="train", per_level=NUM_SAMPLES_TO_LOAD_PER_LEVEL, levels=LEVELS, seed=SEED)
+```
+
 
 ### Running the file
 

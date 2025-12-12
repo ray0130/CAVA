@@ -3,6 +3,8 @@ Chain of Agent and Verification
 
 Yueh-An Liao, Ray Wen
 
+Our Code can be found in this github repository: https://github.com/ray0130/CAVA
+
 ## Step by Step Tutorial
 
 ### File descriptions
